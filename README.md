@@ -104,15 +104,31 @@ claude mcp add x402-weather --transport http http://localhost:4022/mcp
 ### 使い方
 
 1. サーバーを起動: `pnpm server`
-2. Claude Code を開いて自然言語で質問するだけ
+2. Claude Code を開いて自然言語で質問
 
 ```
+> ping を呼んで
 > 今日の天気を教えて
 ```
 
-Claude が `premium_weather` ツールを発見→402→自動決済→結果取得→回答生成まで自動実行します。
+### 現時点の制限
 
-> **Important:** Claude Code 側にも x402 対応ウォレットの設定が必要です。未設定の場合は 402 Payment Required で止まります。
+Claude Code の内蔵 MCP クライアントは **x402 の決済フローに対応していません**。そのため:
+
+- **無料ツール（`ping`）** → 正常に動作
+- **有料ツール（`premium_weather`）** → 402 Payment Required が返されて止まる
+
+有料ツールの完全な決済フローを確認するには、`pnpm client`（`src/client.ts`）を使用してください。こちらは `@x402/mcp` の `createx402MCPClient` により自動決済が処理されます。
+
+### x402 対応エージェント
+
+以下のツールを Claude Code に追加することで、x402 決済を自動処理できます。
+
+| ツール | 方式 |
+|---|---|
+| [Payments MCP](https://www.coinbase.com/developer-platform/discover/launches/payments-mcp) (Coinbase) | MCP サーバーとしてウォレット・決済機能を付与 |
+| [@civic/x402-mcp](https://www.npmjs.com/package/@civic/x402-mcp) | Proxy で 402 レスポンスを透過処理 |
+| [x402 Bazaar](https://x402.org/bazaar) | 70+ の x402 対応 API を MCP 経由で利用 |
 
 ## Devnet vs Mainnet
 
