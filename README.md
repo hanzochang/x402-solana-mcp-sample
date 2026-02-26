@@ -1,25 +1,25 @@
 # x402-solana-mcp-sample
 
-x402 V2 + Solana USDC で課金できる MCP サーバーとクライアントのサンプル実装。
+A sample MCP server and client that enables micropayments via x402 V2 + Solana USDC.
 
-## 概要
+## Overview
 
-[x402](https://github.com/coinbase/x402) プロトコルを使って、MCP ツール呼び出しに対してSolana USDC でマイクロペイメントを行うデモです。
+A demo of [x402](https://github.com/coinbase/x402) protocol-based micropayments for MCP tool calls using Solana USDC.
 
-| コンポーネント | 説明 |
+| Component | Description |
 |---|---|
-| **MCPサーバー** (`src/server.ts`) | 無料ツール `ping` と有料ツール `premium_weather`（$0.001 USDC）を提供。StreamableHTTP トランスポート |
-| **エージェントクライアント** (`src/client.ts`) | サーバーに接続し、有料ツール呼び出し時に Solana Devnet 上の USDC で自動決済 |
-| **キーペア生成** (`src/gen-keypair.ts`) | テスト用 Solana ウォレットの生成ユーティリティ |
+| **MCP Server** (`src/server.ts`) | Provides a free tool `ping` and a paid tool `premium_weather` ($0.001 USDC). StreamableHTTP transport |
+| **Agent Client** (`src/client.ts`) | Connects to the server and automatically pays with Solana Devnet USDC for paid tool calls |
+| **Keypair Generator** (`src/gen-keypair.ts`) | Utility to generate a test Solana wallet |
 
-## セットアップ
+## Setup
 
 ```bash
 pnpm install
 cp .env.example .env
 ```
 
-`.env` を編集:
+Edit `.env`:
 
 ```env
 SOLANA_WALLET_ADDRESS=your-solana-wallet-address
@@ -27,22 +27,22 @@ SOLANA_PRIVATE_KEY=your-base58-encoded-private-key
 FACILITATOR_URL=https://x402.org/facilitator
 ```
 
-テスト用キーペアが必要な場合:
+To generate a test keypair:
 
 ```bash
 npx tsx src/gen-keypair.ts
 ```
 
-## ローカル動作確認
+## Local Development
 
-### サーバー起動
+### Start the Server
 
 ```bash
 pnpm server
 # or: npx tsx src/server.ts
 ```
 
-起動すると Facilitator からメタデータが自動取得され、ポート 4022 で待ち受けます。
+On startup, the server fetches metadata from the Facilitator and listens on port 4022.
 
 ```
 ✅ x402 MCP Server running on http://localhost:4022/mcp
@@ -50,41 +50,40 @@ pnpm server
    Paid tool:  premium_weather ($0.001 USDC)
 ```
 
-### エージェントクライアントで決済テスト
+### Run the Agent Client
 
-別ターミナルで:
+In a separate terminal:
 
 ```bash
 pnpm client
 # or: npx tsx src/client.ts
 ```
 
-`@x402/mcp` の `createx402MCPClient` が 402 レスポンスを検知し、Solana USDC トランザクションの構築・署名・リトライを自動で行います。
+The `createx402MCPClient` from `@x402/mcp` automatically detects 402 responses and handles Solana USDC transaction construction, signing, and retry.
 
-- `ping` → 即座に `"pong"` が返る（`paymentMade: false`）
-- `premium_weather` → 402 → 自動決済 → 結果取得（`paymentMade: true`）
+- `ping` → returns `"pong"` immediately (`paymentMade: false`)
+- `premium_weather` → 402 → auto-payment → result (`paymentMade: true`)
 
-> **Note:** Devnet では SOL（ガス代）と USDC（決済用）の残高が必要です。取得方法は下記「テストトークンの取得」を参照してください。残高がない場合 `transaction_simulation_failed` になりますが、決済フロー自体は正しく動作しています。
+> **Note:** Both SOL (for gas) and USDC (for payment) are required on Devnet. See "Getting Test Tokens" below. Without sufficient balance, you'll get `transaction_simulation_failed`, but the payment flow itself is working correctly.
 
-### curl で疎通確認
+### Verify with curl
 
-サーバーが起動した状態で、MCP プロトコルを直接叩いて確認できます。
+With the server running, you can test the MCP protocol directly:
 
 ```bash
-# Initialize
 curl -s -D - -X POST http://localhost:4022/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}'
 
-# レスポンスヘッダーの mcp-session-id を使って後続リクエスト
+# Use the mcp-session-id from the response header for subsequent requests
 ```
 
-## MCPクライアントからの接続
+## Connecting from MCP Clients
 
-### MCP設定
+### MCP Configuration
 
-プロジェクトの `.mcp.json` に追加:
+Add to your project's `.mcp.json`:
 
 ```json
 {
@@ -97,73 +96,68 @@ curl -s -D - -X POST http://localhost:4022/mcp \
 }
 ```
 
-```bash
-# Claude Code の場合
-claude mcp add x402-weather --transport http http://localhost:4022/mcp
-```
+### Current Limitations
 
-### 現時点の制限
+Major MCP clients (Claude Code, Cursor, Gemini, etc.) **do not natively support x402 payment flows**. As a result:
 
-Claude Code、Cursor、Gemini 等の主要な MCP クライアントは、**x402 の決済フローにネイティブ対応していません**。そのため:
+- **Free tools (`ping`)** → work normally
+- **Paid tools (`premium_weather`)** → return 402 Payment Required and stop
 
-- **無料ツール（`ping`）** → 正常に動作
-- **有料ツール（`premium_weather`）** → 402 Payment Required が返されて止まる
+To test the full payment flow, use `pnpm client` (`src/client.ts`).
 
-有料ツールの完全な決済フローを確認するには `pnpm client`（`src/client.ts`）を使用してください。
+### Automate Payments with x402 Plugins
 
-### x402 対応プラグインで決済を自動化する
+You can add MCP plugins to enable x402 payments from existing clients.
 
-MCP プラグインを追加すれば、既存クライアントからでも x402 決済を自動処理できます。
-
-| プラグイン | Solana 対応 | 概要 |
+| Plugin | Solana Support | Description |
 |---|---|---|
-| [Payments MCP](https://docs.cdp.coinbase.com/payments-mcp/welcome) (Coinbase) | Yes | `npx @coinbase/payments-mcp --client claude-code --auto-config` で導入。最も手軽 |
-| [@civic/x402-mcp](https://www.npmjs.com/package/@civic/x402-mcp) | No（EVM のみ） | Proxy 方式で 402 を透過処理 |
-| [x402 MCP Client](https://github.com/coinbase/x402/tree/main/examples/typescript/clients/mcp) | Yes | x402 リポジトリからビルド。上級者向け |
+| [Payments MCP](https://docs.cdp.coinbase.com/payments-mcp/welcome) (Coinbase) | Yes | `npx @coinbase/payments-mcp` to install. Easiest option |
+| [@civic/x402-mcp](https://www.npmjs.com/package/@civic/x402-mcp) | No (EVM only) | Proxy that transparently handles 402 responses |
+| [x402 MCP Client](https://github.com/coinbase/x402/tree/main/examples/typescript/clients/mcp) | Yes | Build from x402 repo. Advanced |
 
-**このプロジェクト（Solana USDC）で試すなら Payments MCP が最も手軽です。**
+**For this project (Solana USDC), Payments MCP is the easiest option.**
 
 ## Devnet vs Mainnet
 
-### Devnet（デフォルト）
+### Devnet (Default)
 
-現在のコードは Solana Devnet で動作します。
+The current code runs on Solana Devnet.
 
-- ネットワーク: `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`
+- Network: `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`
 - USDC Mint: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
-- Facilitator: `https://x402.org/facilitator`（Coinbase CDP、Devnet対応）
+- Facilitator: `https://x402.org/facilitator` (Coinbase CDP, Devnet supported)
 
-### テストトークンの取得
+### Getting Test Tokens
 
-クライアント側のウォレットに **SOL**（ガス代）と **USDC**（決済用）の両方が必要です。
+The client wallet needs both **SOL** (for gas) and **USDC** (for payment).
 
-**SOL（ガス代）:**
+**SOL (gas):**
 
 ```bash
-# CLI から（Solana CLI が必要）
+# Via CLI (requires Solana CLI)
 solana airdrop 2 <YOUR_WALLET_ADDRESS> --url devnet
 
-# または Web Faucet
+# Or use the Web Faucet
 # https://faucet.solana.com/
 ```
 
-**USDC（決済用）:**
+**USDC (payment):**
 
-[Circle Testnet Faucet](https://faucet.circle.com/) から取得します。
+Get it from [Circle Testnet Faucet](https://faucet.circle.com/):
 
-1. https://faucet.circle.com/ にアクセス
-2. **USDC** を選択
-3. ネットワークで **Solana Devnet** を選択
-4. ウォレットアドレスを入力
-5. reCAPTCHA を完了して送信
+1. Go to https://faucet.circle.com/
+2. Select **USDC**
+3. Choose **Solana Devnet**
+4. Enter your wallet address
+5. Complete reCAPTCHA and submit
 
-> 2時間ごとに最大 20 USDC を取得可能。アカウント登録不要。
+> Up to 20 USDC every 2 hours. No account required.
 
-USDC 残高がない状態でも `premium_weather` を呼ぶと 402 → 決済フロー → `transaction_simulation_failed` という流れを確認できます。フロー自体は正しく動作しています。
+Even without USDC balance, calling `premium_weather` will show the full flow: 402 → payment attempt → `transaction_simulation_failed`. The flow itself is working correctly.
 
-### Mainnet への移行
+### Migrating to Mainnet
 
-`src/server.ts` の定数を差し替えます:
+Replace the constants in `src/server.ts`:
 
 ```typescript
 // Devnet → Mainnet
@@ -175,32 +169,32 @@ const paymentAccepts = await resourceServer.buildPaymentRequirements({
   scheme: "exact",
   network: SOLANA_MAINNET_CAIP2,
   payTo: solanaAddress,
-  price: "$0.01",  // 本番価格
+  price: "$0.01",  // production price
 });
 ```
 
-クライアント側も同様に `SOLANA_MAINNET_CAIP2` を使用します。
+Update the client similarly to use `SOLANA_MAINNET_CAIP2`.
 
-## ツール一覧
+## Tools
 
-| ツール | 価格 | 説明 |
+| Tool | Price | Description |
 |---|---|---|
-| `ping` | 無料 | ヘルスチェック。`"pong"` を返す |
-| `premium_weather` | $0.001 USDC | 指定都市の天気データを返す |
+| `ping` | Free | Health check. Returns `"pong"` |
+| `premium_weather` | $0.001 USDC | Returns weather data for a given city |
 
-## 技術スタック
+## Tech Stack
 
-- **MCP SDK**: `@modelcontextprotocol/sdk` v1.27+（StreamableHTTP）
+- **MCP SDK**: `@modelcontextprotocol/sdk` v1.27+ (StreamableHTTP)
 - **x402**: `@x402/mcp` + `@x402/core` + `@x402/svm` v2.5
-- **Solana**: `@solana/kit` v6（キーペア署名）
+- **Solana**: `@solana/kit` v6 (keypair signing)
 - **Runtime**: Node.js + tsx
 - **Server**: Express v5
 
-## 関連記事
+## Related Articles
 
-- [x402 × Solana実装ガイド | 支払い対応MCPサーバーをTypeScriptで構築する](https://hanzochang.com/articles/50)
-- [x402とは？ AIエージェント × MCP × 暗号資産が交差するHTTP自動決済プロトコル](https://hanzochang.com/articles/48)
-- [x402 V2 解説](https://hanzochang.com/articles/49)
+- [x402 × Solana Implementation Guide | Building a Payment-Enabled MCP Server in TypeScript](https://hanzochang.com/articles/50)
+- [What is x402? The HTTP Auto-Payment Protocol at the Intersection of AI Agents, MCP, and Crypto](https://hanzochang.com/articles/48)
+- [x402 V2 Deep Dive](https://hanzochang.com/articles/49)
 
 ## License
 
