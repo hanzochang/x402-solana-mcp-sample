@@ -14,6 +14,10 @@
   "packageManager": "pnpm@10.28.1",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@noble/curves": "^2.0.1",
+    "@scure/base": "^2.0.0",
+    "@solana/kit": "^6.1.0",
+    "@solana/web3.js": "^1.98.4",
     "@x402/core": "^2.5.0",
     "@x402/mcp": "^2.5.0",
     "@x402/svm": "^2.5.0",
