@@ -62,7 +62,7 @@ pnpm client
 - `ping` → 即座に `"pong"` が返る（`paymentMade: false`）
 - `premium_weather` → 402 → 自動決済 → 結果取得（`paymentMade: true`）
 
-> **Note:** Devnet では USDC 残高が必要です。残高がない場合 `transaction_simulation_failed` になりますが、決済フロー自体は正しく動作しています。
+> **Note:** Devnet では SOL（ガス代）と USDC（決済用）の残高が必要です。取得方法は下記「テストトークンの取得」を参照してください。残高がない場合 `transaction_simulation_failed` になりますが、決済フロー自体は正しく動作しています。
 
 ### curl で疎通確認
 
@@ -122,8 +122,35 @@ Claude が `premium_weather` ツールを発見→402→自動決済→結果取
 
 - ネットワーク: `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`
 - USDC Mint: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
-- テスト用 SOL: [Solana Faucet](https://faucet.solana.com/)
 - Facilitator: `https://x402.org/facilitator`（Coinbase CDP、Devnet対応）
+
+### テストトークンの取得
+
+クライアント側のウォレットに **SOL**（ガス代）と **USDC**（決済用）の両方が必要です。
+
+**SOL（ガス代）:**
+
+```bash
+# CLI から（Solana CLI が必要）
+solana airdrop 2 <YOUR_WALLET_ADDRESS> --url devnet
+
+# または Web Faucet
+# https://faucet.solana.com/
+```
+
+**USDC（決済用）:**
+
+[Circle Testnet Faucet](https://faucet.circle.com/) から取得します。
+
+1. https://faucet.circle.com/ にアクセス
+2. **USDC** を選択
+3. ネットワークで **Solana Devnet** を選択
+4. ウォレットアドレスを入力
+5. reCAPTCHA を完了して送信
+
+> 2時間ごとに最大 20 USDC を取得可能。アカウント登録不要。
+
+USDC 残高がない状態でも `premium_weather` を呼ぶと 402 → 決済フロー → `transaction_simulation_failed` という流れを確認できます。フロー自体は正しく動作しています。
 
 ### Mainnet への移行
 
