@@ -88,7 +88,7 @@ curl -s -D - -X POST http://localhost:4022/mcp \
 {
   "mcpServers": {
     "x402-weather": {
-      "type": "streamablehttp",
+      "type": "http",
       "url": "http://localhost:4022/mcp"
     }
   }
@@ -98,7 +98,7 @@ curl -s -D - -X POST http://localhost:4022/mcp \
 または CLI で:
 
 ```bash
-claude mcp add x402-weather --transport streamablehttp http://localhost:4022/mcp
+claude mcp add x402-weather --transport http http://localhost:4022/mcp
 ```
 
 ### 使い方
