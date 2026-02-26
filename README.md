@@ -1,40 +1,171 @@
-# x402-solana
+# x402-solana-mcp-sample
 
-x402 V2 + Solana + MCP Server demo.
+x402 V2 + Solana USDC で課金できる MCP サーバーとクライアントのサンプル実装。
 
-Payment-enabled MCP server using `@x402/mcp` with Solana USDC on Devnet.
+## 概要
 
-## Setup
+[x402](https://github.com/coinbase/x402) プロトコルを使って、MCP ツール呼び出しに対してSolana USDC でマイクロペイメントを行うデモです。
+
+| コンポーネント | 説明 |
+|---|---|
+| **MCPサーバー** (`src/server.ts`) | 無料ツール `ping` と有料ツール `premium_weather`（$0.001 USDC）を提供。StreamableHTTP トランスポート |
+| **MCPクライアント** (`src/client.ts`) | サーバーに接続し、有料ツール呼び出し時に Solana Devnet 上の USDC で自動決済 |
+| **キーペア生成** (`src/gen-keypair.ts`) | テスト用 Solana ウォレットの生成ユーティリティ |
+
+## セットアップ
 
 ```bash
 pnpm install
-cp .env.example .env  # Set your wallet address and private key
+cp .env.example .env
 ```
 
-## Run
+`.env` を編集:
+
+```env
+SOLANA_WALLET_ADDRESS=your-solana-wallet-address
+SOLANA_PRIVATE_KEY=your-base58-encoded-private-key
+FACILITATOR_URL=https://x402.org/facilitator
+```
+
+テスト用キーペアが必要な場合:
 
 ```bash
-# Start server
-pnpm server
-
-# In another terminal
-pnpm client
+npx tsx src/gen-keypair.ts
 ```
 
-## Architecture
+## ローカル動作確認
 
-- **Server**: StreamableHTTP MCP server with x402 payment wrapper
-- **Client**: x402-aware MCP client with auto-payment
-- **Payment**: Solana Devnet USDC ($0.001 per paid tool call)
-- **Facilitator**: Coinbase CDP (`https://x402.org/facilitator`)
+### サーバー起動
 
-## Tools
+```bash
+pnpm server
+# or: npx tsx src/server.ts
+```
 
-| Tool | Price | Description |
-|------|-------|-------------|
-| `ping` | Free | Health check |
-| `premium_weather` | $0.001 USDC | Weather data |
+起動すると Facilitator からメタデータが自動取得され、ポート 4022 で待ち受けます。
 
-## Article
+```
+✅ x402 MCP Server running on http://localhost:4022/mcp
+   Free tool:  ping
+   Paid tool:  premium_weather ($0.001 USDC)
+```
 
-[x402 × Solana実装ガイド](https://hanzochang.com/articles/50)
+### クライアントでテスト
+
+別ターミナルで:
+
+```bash
+pnpm client
+# or: npx tsx src/client.ts
+```
+
+- `ping` → 即座に `"pong"` が返る（`paymentMade: false`）
+- `premium_weather` → 402 → 自動決済 → 結果取得（`paymentMade: true`）
+
+> **Note:** Devnet では USDC 残高が必要です。残高がない場合 `transaction_simulation_failed` になりますが、決済フロー自体は正しく動作しています。
+
+### curl で疎通確認
+
+サーバーが起動した状態で、MCP プロトコルを直接叩いて確認できます。
+
+```bash
+# Initialize
+curl -s -D - -X POST http://localhost:4022/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}'
+
+# レスポンスヘッダーの mcp-session-id を使って後続リクエスト
+```
+
+## Claude Code から使う（MCP接続）
+
+### 設定
+
+プロジェクトの `.mcp.json` に追加:
+
+```json
+{
+  "mcpServers": {
+    "x402-weather": {
+      "type": "streamablehttp",
+      "url": "http://localhost:4022/mcp"
+    }
+  }
+}
+```
+
+または CLI で:
+
+```bash
+claude mcp add x402-weather --transport streamablehttp http://localhost:4022/mcp
+```
+
+### 使い方
+
+1. サーバーを起動: `pnpm server`
+2. Claude Code を開いて自然言語で質問するだけ
+
+```
+> 今日の天気を教えて
+```
+
+Claude が `premium_weather` ツールを発見→402→自動決済→結果取得→回答生成まで自動実行します。
+
+> **Important:** Claude Code 側にも x402 対応ウォレットの設定が必要です。未設定の場合は 402 Payment Required で止まります。
+
+## Devnet vs Mainnet
+
+### Devnet（デフォルト）
+
+現在のコードは Solana Devnet で動作します。
+
+- ネットワーク: `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`
+- USDC Mint: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
+- テスト用 SOL: [Solana Faucet](https://faucet.solana.com/)
+- Facilitator: `https://x402.org/facilitator`（Coinbase CDP、Devnet対応）
+
+### Mainnet への移行
+
+`src/server.ts` の定数を差し替えます:
+
+```typescript
+// Devnet → Mainnet
+import { SOLANA_MAINNET_CAIP2, USDC_MAINNET_ADDRESS } from "@x402/svm";
+
+resourceServer.register(SOLANA_MAINNET_CAIP2, new ExactSvmScheme());
+
+const paymentAccepts = await resourceServer.buildPaymentRequirements({
+  scheme: "exact",
+  network: SOLANA_MAINNET_CAIP2,
+  payTo: solanaAddress,
+  price: "$0.01",  // 本番価格
+});
+```
+
+クライアント側も同様に `SOLANA_MAINNET_CAIP2` を使用します。
+
+## ツール一覧
+
+| ツール | 価格 | 説明 |
+|---|---|---|
+| `ping` | 無料 | ヘルスチェック。`"pong"` を返す |
+| `premium_weather` | $0.001 USDC | 指定都市の天気データを返す |
+
+## 技術スタック
+
+- **MCP SDK**: `@modelcontextprotocol/sdk` v1.27+（StreamableHTTP）
+- **x402**: `@x402/mcp` + `@x402/core` + `@x402/svm` v2.5
+- **Solana**: `@solana/kit` v6（キーペア署名）
+- **Runtime**: Node.js + tsx
+- **Server**: Express v5
+
+## 関連記事
+
+- [x402 × Solana実装ガイド | 支払い対応MCPサーバーをTypeScriptで構築する](https://hanzochang.com/articles/50)
+- [x402とは？ AIエージェント × MCP × 暗号資産が交差するHTTP自動決済プロトコル](https://hanzochang.com/articles/48)
+- [x402 V2 解説](https://hanzochang.com/articles/49)
+
+## License
+
+ISC
